@@ -14,44 +14,54 @@ import (
 	"os"
 )
 
+// StackArgs holds the project and stack names
 type StackArgs struct {
 	ProjectName string
 	StackName   string
 }
 
+// BucketStackSpec holds the bucket name and a custom message
 type BucketStackSpec struct {
 	BucketName    string `bson:"bucketName"`
 	CustomMessage string `bson:"customMessage"`
 }
 
+// BucketStackArgs holds the stack and spec details
 type BucketStackArgs struct {
 	Stack StackArgs
 	Spec  BucketStackSpec
 }
 
+// BucketStackManager manages a stack
 type BucketStackManager struct {
 	Name  string
 	Stack *auto.Stack
 }
 
 func main() {
+	// Create a new router
 	router := gin.New()
+	// Create a new router group
 	bucket := router.Group("/bucket")
 	{
+		// Define the routes for the group
 		bucket.POST("/", BucketHandler("up"))
 		bucket.DELETE("/", BucketHandler("destroy"))
 		bucket.POST("/refresh", BucketHandler("refresh"))
 		bucket.POST("/cancel", BucketHandler("cancel"))
 	}
+	// Run the router
 	err := router.Run()
 	if err != nil {
 		panic(err)
 	}
 }
 
+// NewBucketManager creates a new bucket manager
 func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackManager, error) {
 	// This is where the pulumi code is defined for the stack, this is the code that defines the S3 bucket
 	bucketDeployFunc := func(ctx *pulumi.Context) error {
+		// Create a new S3 bucket
 		siteBucket, err := s3.NewBucket(ctx, args.Spec.BucketName, &s3.BucketArgs{
 			Bucket: pulumi.String(args.Spec.BucketName),
 			Website: s3.BucketWebsiteArgs{
@@ -61,12 +71,14 @@ func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackMa
 		if err != nil {
 			return err
 		}
+		// Define the index content
 		indexContent := fmt.Sprintf(`<html><head>
-		<title>S3 Automation</title><meta charset="UTF-8">
-	</head>
-	<body><p>Hello, thanks for being part of this!</p><p>Made with ❤️ with <a href="https://pulumi.com">Pulumi</a></p><p>Your custom message is = %s </p>
-	</body></html>
+  <title>S3 Automation</title><meta charset="UTF-8">
+ </head>
+ <body><p>Hello, thanks for being part of this!</p><p>Made with ❤️ with <a href="https://pulumi.com">Pulumi</a></p><p>Your custom message is = %s </p>
+ </body></html>
 `, args.Spec.CustomMessage)
+		// Create a new S3 bucket object
 		if _, err := s3.NewBucketObject(ctx, "index", &s3.BucketObjectArgs{
 			Bucket:      siteBucket.ID(),
 			Content:     pulumi.String(indexContent),
@@ -76,6 +88,7 @@ func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackMa
 			return err
 		}
 
+		// Create a new S3 bucket public access block
 		accessBlock, err := s3.NewBucketPublicAccessBlock(ctx, "public-access-block", &s3.BucketPublicAccessBlockArgs{
 			Bucket:          siteBucket.ID(),
 			BlockPublicAcls: pulumi.Bool(false),
@@ -83,6 +96,7 @@ func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackMa
 		if err != nil {
 			return err
 		}
+		// Create a new S3 bucket policy
 		if _, err := s3.NewBucketPolicy(ctx, "bucketPolicy", &s3.BucketPolicyArgs{
 			Bucket: siteBucket.ID(), // refer to the bucket created earlier
 			Policy: pulumi.Any(map[string]interface{}{
@@ -104,6 +118,7 @@ func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackMa
 			return err
 		}
 
+		// Export the website URL
 		ctx.Export("websiteUrl", siteBucket.WebsiteEndpoint)
 		return nil
 	}
@@ -131,6 +146,7 @@ func NewBucketManager(ctx context.Context, args BucketStackArgs) (*BucketStackMa
 	}, nil
 }
 
+// Run executes the specified action on the stack
 func (b *BucketStackManager) Run(ctx context.Context, action string) (string, error) {
 	//Depending on the action, the stack will be created, updated, destroyed or canceled
 	switch action {
@@ -172,6 +188,7 @@ func (b *BucketStackManager) Run(ctx context.Context, action string) (string, er
 	}
 }
 
+// BucketHandler handles bucket related requests
 func BucketHandler(command string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
