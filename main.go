@@ -45,10 +45,8 @@ func main() {
 	bucket := router.Group("/bucket")
 	{
 		// Define the routes for the group
-		bucket.POST("/", BucketHandler("up"))
-		bucket.DELETE("/", BucketHandler("destroy"))
-		bucket.POST("/refresh", BucketHandler("refresh"))
-		bucket.POST("/cancel", BucketHandler("cancel"))
+		bucket.POST("/", Up())
+		bucket.DELETE("/", Destroy())
 	}
 	// Run the router
 	err := router.Run()
@@ -157,14 +155,6 @@ func (b *BucketStackManager) Run(ctx context.Context, action string) (string, er
 			return "", err
 		}
 		return fmt.Sprintf("Website URL: %s", up.Outputs["websiteUrl"].Value.(string)), nil
-	case "refresh":
-		fmt.Printf("Refreshing stack: %s\n", b.Name)
-		_, err := b.Stack.Refresh(ctx)
-		if err != nil {
-			fmt.Printf("Failed to refresh stack: %s\n", b.Name)
-			return "", err
-		}
-		return fmt.Sprintf("Stack refreshed successfully: %s", b.Name), nil
 	case "destroy":
 		fmt.Printf("Starting stack destroy: %s", b.Name)
 		stdoutStreamer := optdestroy.ProgressStreams(os.Stdout)
@@ -175,21 +165,12 @@ func (b *BucketStackManager) Run(ctx context.Context, action string) (string, er
 			return "", err
 		}
 		return fmt.Sprintf("Stack successfully destroyed: %s", b.Name), nil
-	case "cancel":
-		fmt.Printf("Starting stack cancel: %s\n", b.Name)
-		err := b.Stack.Cancel(ctx)
-		if err != nil {
-			return "", err
-		}
-
-		return fmt.Sprintf("Stack successfully canceled: %s", b.Name), err
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
 }
 
-// BucketHandler handles bucket related requests
-func BucketHandler(command string) func(c *gin.Context) {
+func Up() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		var body BucketStackSpec
@@ -214,7 +195,31 @@ func BucketHandler(command string) func(c *gin.Context) {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
-		output, err := stack.Run(ctx, command)
+		output, err := stack.Run(ctx, "up")
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": output})
+	}
+}
+
+func Destroy() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		stack, err := NewBucketManager(ctx, BucketStackArgs{
+			Stack: StackArgs{
+				ProjectName: "pulumi_api_rest",
+				StackName:   "dev",
+			},
+			Spec: BucketStackSpec{},
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		output, err := stack.Run(ctx, "destroy")
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
