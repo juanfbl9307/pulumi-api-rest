@@ -1,0 +1,20 @@
+# gitignore for golang project
+#
+data/
+# Ignore IDE and editor files
+.vscode/
+.idea/
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+
+# Ignore environment-specific files
+.env
+.env.local
+.env.development
+.env.production
+
+# Ignore sensitive or personal files
+secrets.json
+credentials.txt
